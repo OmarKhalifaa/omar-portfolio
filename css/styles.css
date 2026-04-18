@@ -40,7 +40,7 @@
   --cursor-blend: normal;
 }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: auto; }
 
 body {
   background: var(--bg);

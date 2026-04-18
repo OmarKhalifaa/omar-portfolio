@@ -77,6 +77,94 @@ if (hero) {
   });
 }
 
+/* ── SMOOTH LERP SCROLL (desktop only) ── */
+if (window.matchMedia('(hover: hover)').matches) {
+  let targetY = window.scrollY;
+  let currentY = window.scrollY;
+  const EASE = 0.075;
+
+  window.addEventListener('wheel', e => {
+    if (e.ctrlKey || e.metaKey) return; // allow pinch-zoom
+    e.preventDefault();
+    targetY = Math.max(0, Math.min(
+      targetY + e.deltaY,
+      document.documentElement.scrollHeight - window.innerHeight
+    ));
+  }, { passive: false });
+
+  // Intercept anchor nav so lerp follows
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) { e.preventDefault(); targetY = target.offsetTop; }
+    });
+  });
+
+  (function tick() {
+    const diff = targetY - currentY;
+    if (Math.abs(diff) > 0.3) {
+      currentY += diff * EASE;
+      window.scrollTo(0, currentY);
+    }
+    requestAnimationFrame(tick);
+  })();
+}
+
+/* ── PIXEL REVEAL ON CARD THUMBS ── */
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return [r,g,b];
+}
+function lerpColor(hex1, hex2, t) {
+  t = Math.max(0, Math.min(1, t));
+  const [r1,g1,b1] = hexToRgb(hex1);
+  const [r2,g2,b2] = hexToRgb(hex2);
+  return `rgb(${Math.round(r1+(r2-r1)*t)},${Math.round(g1+(g2-g1)*t)},${Math.round(b1+(b2-b1)*t)})`;
+}
+
+const THUMB_COLORS = {
+  t1: ['#111624','#161c2e'],
+  t2: ['#0f1a17','#141f1c'],
+  t3: ['#1a1412','#201a16'],
+  t4: ['#181318','#1e1520'],
+};
+
+document.querySelectorAll('.card-thumb').forEach(thumb => {
+  const cls = [...thumb.classList].find(c => THUMB_COLORS[c]);
+  if (!cls) return;
+  const [c1, c2] = THUMB_COLORS[cls];
+
+  const COLS = 16, ROWS = 10;
+  const canvas = document.createElement('canvas');
+  canvas.width = COLS; canvas.height = ROWS;
+  Object.assign(canvas.style, {
+    position: 'absolute', inset: '0', width: '100%', height: '100%',
+    imageRendering: 'pixelated', zIndex: '3', pointerEvents: 'none',
+    opacity: '1', transition: 'opacity 1.1s cubic-bezier(0.4, 0, 0.2, 1) 0.15s',
+  });
+
+  const ctx = canvas.getContext('2d');
+  for (let x = 0; x < COLS; x++) {
+    for (let y = 0; y < ROWS; y++) {
+      const t = (x / COLS) + (Math.random() * 0.3 - 0.15);
+      ctx.fillStyle = lerpColor(c1, c2, t);
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  thumb.appendChild(canvas);
+
+  const obs = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting) {
+      canvas.style.opacity = '0';
+      obs.disconnect();
+    }
+  }, { threshold: 0.25 });
+  obs.observe(thumb);
+});
+
 /* ── COUNTER ANIMATION ── */
 function animateCounter(el) {
   const target = +el.dataset.count;
