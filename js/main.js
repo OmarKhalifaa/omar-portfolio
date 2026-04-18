@@ -77,6 +77,37 @@ if (hero) {
   });
 }
 
+/* ── COUNTER ANIMATION ── */
+function animateCounter(el) {
+  const target = +el.dataset.count;
+  const suffix = el.dataset.suffix || '';
+  const duration = 1800;
+  const start = performance.now();
+
+  const easeOutExpo = t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+
+  function tick(now) {
+    const elapsed = now - start;
+    const progress = Math.min(elapsed / duration, 1);
+    const value = Math.floor(easeOutExpo(progress) * target);
+    el.textContent = value + suffix;
+    if (progress < 1) requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+const counterObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting && !entry.target.dataset.counted) {
+      entry.target.dataset.counted = 'true';
+      animateCounter(entry.target);
+    }
+  });
+}, { threshold: 0.5 });
+
+document.querySelectorAll('.about-stat-num[data-count]').forEach(el => counterObserver.observe(el));
+
 /* ── SCROLL REVEAL ── */
 const io = new IntersectionObserver(entries => {
   entries.forEach(entry => {
