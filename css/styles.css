@@ -665,6 +665,41 @@ section {
 
 .card-thumb.has-cms-thumbnail .thumb-icon { display: none; }
 
+.has-thumbnail-reveal > .cms-card-thumb-image { opacity: 0; }
+.has-thumbnail-reveal > .thumb-blur-layer {
+  z-index: 6;
+  filter: blur(8px);
+  transform: scale(1.04);
+  pointer-events: none;
+}
+.thumbnail-loaded > .thumb-blur-layer { opacity: 1; }
+.thumb-pixel-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 7;
+  image-rendering: pixelated;
+  pointer-events: none;
+  opacity: 1;
+}
+.thumbnail-revealing > .thumb-pixel-layer {
+  opacity: 0;
+  transition: opacity 1s .45s cubic-bezier(.4, 0, .2, 1);
+}
+.thumbnail-revealing > .cms-card-thumb-image {
+  opacity: 1;
+  transition: opacity .9s .8s ease;
+}
+.thumbnail-revealing > .thumb-blur-layer {
+  opacity: 0;
+  transition: opacity .9s .8s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .has-thumbnail-reveal > .cms-card-thumb-image { opacity: 1; transition: none; }
+  .thumb-blur-layer, .thumb-pixel-layer { display: none; }
+}
+
 .t1 .thumb-icon { background: rgba(83,74,183,0.15); }
 .t2 .thumb-icon { background: rgba(230,0,0,0.16); }
 .t3 .thumb-icon { background: rgba(216,90,48,0.15); }
@@ -1844,16 +1879,17 @@ html::-webkit-scrollbar,
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes columnBlend {
-  from { opacity: 0; filter: blur(12px); }
-  to { opacity: 1; filter: blur(0); }
+@keyframes columnReveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .concept-page .nav-pill { animation: conceptEnter .45s .03s cubic-bezier(.22,.75,.25,1) both; }
-  .concept-page #hero { animation: columnBlend .9s .03s cubic-bezier(.22,.75,.25,1) both; }
-  .concept-page #work { animation: columnBlend .9s .2s cubic-bezier(.22,.75,.25,1) both; }
-  .concept-profile { animation: columnBlend .9s .38s cubic-bezier(.22,.75,.25,1) both; }
+  html { scroll-behavior: smooth; }
+  .concept-page #hero { animation: columnReveal .7s .03s ease-out both; }
+  .concept-page #work { animation: columnReveal .7s .1s ease-out both; }
+  .concept-profile { animation: columnReveal .7s .18s ease-out both; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -140,7 +140,8 @@ Vertical borders are structural grid lines. The middle card stack uses a two-col
 
 | Pattern | Behaviour |
 |---|---|
-| Column entrance | Columns blend in left-to-right with blur removal; delays are `.03s`, `.2s`, `.38s` |
+| Column entrance | Columns fade in with opacity only; delays are `.03s`, `.1s`, `.18s`. Thumbnails reveal through the original 8 × 5 colored pixel mosaic, then blur to sharp. Pixel opacity fades over `1s` after a `.45s` hold; the fixed blurred layer fades over `.9s` after `.8s`. Each reveal waits for image decode, homepage entry, and viewport visibility; this applies on refresh and project-logo returns. Native scrolling replaces the intercepted wheel loop. |
+| Portfolio introduction | Automatic three-sticker sequence on the first homepage visit per tab session (5s after artwork readiness). Its `.5s` fade starts 250ms before the page and thumbnail entrances resume. Visible thumbnail images decode during the intro; the original colored pixel overlays are preserved; full-column animated blur stays removed. A shared readiness gate coordinates normal homepage entries as well as the intro. No progress or playback controls. Escape skips; reduced motion bypasses the intro. `loader-preview.html` opens `index.html?intro=1` to replay it. Loading waits are bounded so the page remains accessible on a slow connection. |
 | Hero trail | Inertial green cursor trail with collision fragments; continues within the active hero session |
 | Dot glints | Random positions, `3.5–7.5s` independent pulse cycles |
 | Grid rain | Green light pulses travel down the three primary vertical separators every `4.6s` |

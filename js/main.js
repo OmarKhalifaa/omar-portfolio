@@ -397,61 +397,77 @@ document.querySelectorAll('.halo-card').forEach(card => {
   resize();
 })();
 
-/* ── SMOOTH LERP SCROLL (desktop only) ── */
-if (window.matchMedia('(hover: hover)').matches) {
-  let targetY = window.scrollY;
-  let currentY = window.scrollY;
-  const EASE = 0.12;
-
-  window.addEventListener('wheel', e => {
-    if (e.ctrlKey || e.metaKey) return; // allow pinch-zoom
-    e.preventDefault();
-    targetY = Math.max(0, Math.min(
-      targetY + e.deltaY,
-      document.documentElement.scrollHeight - window.innerHeight
-    ));
-  }, { passive: false });
-
-  // Intercept anchor nav so lerp follows
-  document.querySelectorAll('a[href^="#"]').forEach(a => {
-    a.addEventListener('click', e => {
-      const href = (a.getAttribute('href') || '').trim();
-      if (!href || href === '#') return;
-      const target = document.querySelector(href);
-      if (target) { e.preventDefault(); targetY = target.offsetTop; }
-    });
-  });
-
-  (function tick() {
-    const diff = targetY - currentY;
-    if (Math.abs(diff) > 0.3) {
-      currentY += diff * EASE;
-      window.scrollTo(0, currentY);
+// Static pixel and blur layers dissolve in sequence once the thumbnail is ready.
+async function prepareThumbnailReveal(thumb, image) {
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let blurLayer;
+  let pixelLayer;
+  if (!reduceMotion) {
+    blurLayer = image.cloneNode();
+    blurLayer.className = 'cms-card-thumb-image thumb-blur-layer';
+    blurLayer.alt = '';
+    blurLayer.setAttribute('aria-hidden', 'true');
+    thumb.classList.add('has-thumbnail-reveal');
+    thumb.append(blurLayer);
+    pixelLayer = document.createElement('canvas');
+    pixelLayer.className = 'thumb-pixel-layer';
+    pixelLayer.width = 8;
+    pixelLayer.height = 5;
+    pixelLayer.setAttribute('aria-hidden', 'true');
+    const context = pixelLayer.getContext('2d');
+    const palettes = {
+      t1: ['#111624', '#4a4f7a'], t2: ['#230707', '#8f1717'],
+      t3: ['#1a1412', '#6b4a3a'], t4: ['#181318', '#5a3a5a']
+    };
+    const palette = palettes[[...thumb.classList].find(name => palettes[name])] || palettes.t1;
+    const rgb = hex => [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16));
+    const base = rgb(thumb.dataset.pixelBase || palette[0]);
+    const accent = rgb(thumb.dataset.pixelAccent || palette[1]);
+    if (context) {
+      for (let x = 0; x < 8; x++) {
+        for (let y = 0; y < 5; y++) {
+          const mix = Math.random() < .35 ? .6 + Math.random() * .4 : Math.random() * .4;
+          const color = base.map((channel, i) => Math.round(channel + (accent[i] - channel) * mix));
+          context.fillStyle = `rgb(${color.join(',')})`;
+          context.fillRect(x, y, 1, 1);
+        }
+      }
+      thumb.append(pixelLayer);
     }
-    requestAnimationFrame(tick);
-  })();
+  }
+  try {
+    await image.decode();
+  } catch {
+    blurLayer?.remove();
+    pixelLayer?.remove();
+    image.remove();
+    thumb.classList.remove('has-thumbnail-reveal', 'has-cms-thumbnail');
+    return;
+  }
+  if (reduceMotion) return;
+  thumb.classList.add('thumbnail-loaded');
+  const observe = () => {
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+      observer.disconnect();
+      // Give the blurred layer a painted frame even on a warm-cache return.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        thumb.classList.add('thumbnail-revealing');
+        setTimeout(() => {
+          blurLayer.remove();
+          pixelLayer.remove();
+          thumb.classList.remove('has-thumbnail-reveal', 'thumbnail-loaded', 'thumbnail-revealing');
+        }, 1900);
+      }));
+    }, { threshold: .12 });
+    observer.observe(thumb);
+  };
+  if (document.documentElement.classList.contains('home-enter-pending') || document.documentElement.classList.contains('intro-pending')) {
+    document.addEventListener('portfolio:ready', observe, { once: true });
+  } else {
+    observe();
+  }
 }
-
-/* ── PIXEL REVEAL ON CARD THUMBS ── */
-function hexToRgb(hex) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  return [r,g,b];
-}
-function lerpColor(hex1, hex2, t) {
-  t = Math.max(0, Math.min(1, t));
-  const [r1,g1,b1] = hexToRgb(hex1);
-  const [r2,g2,b2] = hexToRgb(hex2);
-  return `rgb(${Math.round(r1+(r2-r1)*t)},${Math.round(g1+(g2-g1)*t)},${Math.round(b1+(b2-b1)*t)})`;
-}
-
-const THUMB_COLORS = {
-  t1: ['#111624','#4a4f7a'],
-  t2: ['#230707','#8f1717'],
-  t3: ['#1a1412','#6b4a3a'],
-  t4: ['#181318','#5a3a5a'],
-};
 
 const homepageCardsReady = Promise.all([...document.querySelectorAll('[data-project-card]')].map(async card => {
   const slug = card.dataset.projectCard;
@@ -474,16 +490,14 @@ const homepageCardsReady = Promise.all([...document.querySelectorAll('[data-proj
       image.className = 'cms-card-thumb-image';
       image.src = project.thumbnail;
       image.alt = project.thumbnailAlt || `${project.title || 'Project'} thumbnail`;
-      image.loading = 'lazy';
+      const visibleAtEntry = thumb.getBoundingClientRect().top < window.innerHeight;
+      image.loading = visibleAtEntry ? 'eager' : 'lazy';
+      image.decoding = 'async';
       image.style.objectFit = project.thumbnailFit === 'cover' ? 'cover' : 'contain';
       thumb.prepend(image);
       thumb.classList.add('has-cms-thumbnail');
-      if (!image.complete) {
-        await new Promise(resolve => {
-          image.addEventListener('load', resolve, { once: true });
-          image.addEventListener('error', resolve, { once: true });
-        });
-      }
+      const thumbnailReady = prepareThumbnailReveal(thumb, image);
+      if (visibleAtEntry) await thumbnailReady;
     } else if (project.thumbnailIcon) {
       const icon = card.querySelector('.thumb-icon');
       if (icon) {
@@ -510,48 +524,8 @@ const homepageCardsReady = Promise.all([...document.querySelectorAll('[data-proj
   }
 }));
 
-// Delay setup so page-load visible cards still show the pixel effect
-homepageCardsReady.finally(() => setTimeout(() => document.querySelectorAll('.card-thumb').forEach(thumb => {
-  const cls = [...thumb.classList].find(c => THUMB_COLORS[c]);
-  if (!cls) return;
-  const [fallbackBase, fallbackAccent] = THUMB_COLORS[cls];
-  const c1 = thumb.dataset.pixelBase || fallbackBase;
-  const c2 = thumb.dataset.pixelAccent || fallbackAccent;
-
-  const COLS = 8, ROWS = 5;
-  const canvas = document.createElement('canvas');
-  canvas.width = COLS; canvas.height = ROWS;
-  Object.assign(canvas.style, {
-    position: 'absolute', top: '0', left: '0', right: '0', bottom: '0',
-    width: '100%', height: '100%',
-    imageRendering: 'pixelated', zIndex: '6', pointerEvents: 'none',
-    opacity: '1', transition: 'opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
-  });
-
-  const ctx = canvas.getContext('2d');
-  for (let x = 0; x < COLS; x++) {
-    for (let y = 0; y < ROWS; y++) {
-      // Mix dark base with lighter accent pixels for visible contrast
-      const rand = Math.random();
-      const t = rand < 0.35 ? Math.random() * 0.4 + 0.6 : Math.random() * 0.4;
-      ctx.fillStyle = lerpColor(c1, c2, t);
-      ctx.fillRect(x, y, 1, 1);
-    }
-  }
-
-  thumb.appendChild(canvas);
-
-  // Fade out 900ms after card enters viewport (independent of scroll-reveal)
-  let faded = false;
-  const pixelObs = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting && !faded) {
-      faded = true;
-      setTimeout(() => { canvas.style.opacity = '0'; }, 900);
-      pixelObs.disconnect();
-    }
-  }, { threshold: 0.2, rootMargin: '0px 0px -40px 0px' });
-  pixelObs.observe(thumb);
-}), 50));
+// The intro can wait for visible thumbnails to finish decoding.
+window.homepageAssetsReady = homepageCardsReady;
 
 /* ── COUNTER ANIMATION ── */
 function animateCounter(el) {
@@ -625,7 +599,14 @@ const counterObserver = new IntersectionObserver(entries => {
   });
 }, { threshold: 0.5 });
 
-document.querySelectorAll('.about-stat-num[data-count]').forEach(el => counterObserver.observe(el));
+const observeCounters = () => {
+  document.querySelectorAll('.about-stat-num[data-count]').forEach(el => counterObserver.observe(el));
+};
+if (document.documentElement.classList.contains('intro-pending') || document.documentElement.classList.contains('home-enter-pending')) {
+  document.addEventListener('portfolio:ready', observeCounters, { once: true });
+} else {
+  observeCounters();
+}
 
 /* ── SCROLL REVEAL ── */
 const io = new IntersectionObserver(entries => {
